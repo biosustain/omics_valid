@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use csv::ReaderBuilder;
 
 use serde::Deserialize;
-use std::error::Error;
 use validator::{Validate, ValidationErrorsKind};
 
 lazy_static! {
@@ -15,22 +14,22 @@ lazy_static! {
 }
 
 pub trait OmicsValidator: Validate + for<'de> Deserialize<'de> {
-    fn validate_omics<R: std::io::Read>(file: R) -> Result<(), Box<dyn Error>> {
+    fn validate_omics<R: std::io::Read>(file: R) {
         let mut rdr = ReaderBuilder::new()
             .flexible(Self::flexible())
             .has_headers(Self::has_headers())
             .from_reader(file);
+        let off = if Self::has_headers() { 2 } else { 1 };
         rdr.deserialize().enumerate().for_each(
             |(i, result): (usize, Result<Self, _>)| match result {
                 Ok(record) => {
                     if let Err(e) = record.validate() {
-                        println!("Line {}: {}", i + 1, Self::handle_error(e.into_errors()));
+                        println!("Line {}: {}", i + off, Self::handle_error(e.into_errors()));
                     }
                 }
-                Err(e) => println!("Line {}: {}", i, e),
+                Err(e) => println!("Line {}: {}", i + off, e),
             },
         );
-        Ok(())
     }
     fn has_headers() -> bool {
         true
@@ -66,12 +65,13 @@ pub struct ProtRecord {
 
 impl OmicsValidator for ProtRecord {
     fn handle_error(errors: HashMap<&'static str, ValidationErrorsKind>) -> String {
-        match errors.get("uniprot").unwrap() {
-            validator::ValidationErrorsKind::Field(v) => format!(
+        if let Some(validator::ValidationErrorsKind::Field(v)) = errors.get("uniprot") {
+            format!(
                 "{} invalid Uniprot ID",
                 v[0].params.get("value").unwrap().as_str().unwrap()
-            ),
-            _ => String::from("Maybe wrong numbers?"),
+            )
+        } else {
+            String::from("Maybe wrong numbers?")
         }
     }
     fn has_headers() -> bool {
@@ -107,12 +107,13 @@ pub struct TidyProtRecord {
 
 impl OmicsValidator for TidyProtRecord {
     fn handle_error(errors: HashMap<&'static str, ValidationErrorsKind>) -> String {
-        match errors.get("uniprot").unwrap() {
-            validator::ValidationErrorsKind::Field(v) => format!(
+        if let Some(validator::ValidationErrorsKind::Field(v)) = errors.get("uniprot") {
+            format!(
                 "{} invalid Uniprot ID",
                 v[0].params.get("value").unwrap().as_str().unwrap()
-            ),
-            _ => String::from("Empty sample?"),
+            )
+        } else {
+            String::from("Empty sample?")
         }
     }
     fn flexible() -> bool {
@@ -127,11 +128,11 @@ mod test {
     #[test]
     fn test_validation_of_prot_csv_works() {
         let file = std::fs::File::open("tests/uni.csv").unwrap();
-        ProtRecord::validate_omics(file).unwrap();
+        ProtRecord::validate_omics(file);
     }
     #[test]
     fn test_validation_of_tidy_prot_csv_works() {
         let file = std::fs::File::open("tests/uni_tidy.csv").unwrap();
-        TidyProtRecord::validate_omics(file).unwrap();
+        TidyProtRecord::validate_omics(file);
     }
 }
