@@ -51,6 +51,10 @@ pub fn run(args: Args) -> Result<(), std::io::Error> {
             TidyProtRecord::validate_omics(file);
             Ok(())
         }
+        InputFormat::Met => {
+            TidyMetRecord::validate_omics(file);
+            Ok(())
+        }
         _ => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "kind of proteomics not implemented yet",

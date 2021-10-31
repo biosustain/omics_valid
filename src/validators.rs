@@ -121,6 +121,48 @@ impl OmicsValidator for TidyProtRecord {
     }
 }
 
+/// Metabolite record in tidy form:
+///
+/// ```csv
+/// bigg_id,sample,value
+/// BIGG_ID,SAMPLE_NAME,NUMBER_VALUE
+/// ```
+///
+/// Identifiers that are not in the model will be reported
+///
+/// # Example
+///
+/// ```csv
+/// bigg_id,sample,value
+/// glc__D,SIM1,100001
+/// h,SIM3,100001
+/// acon_C,SIM1,100001
+/// ```
+#[derive(Debug, Deserialize, Validate)]
+pub struct TidyMetRecord {
+    // TODO: implements model look up
+    #[validate(regex(path = "RE_UNIPROT", message = "invalid Uniprot ID %s",))]
+    bigg_id: String,
+    #[validate(length(min = 1))]
+    sample: String,
+    value: f32,
+}
+
+impl OmicsValidator for TidyMetRecord {
+    fn handle_error(errors: HashMap<&'static str, ValidationErrorsKind>) -> String {
+        if let Some(validator::ValidationErrorsKind::Field(v)) = errors.get("uniprot") {
+            format!(
+                "{} invalid Uniprot ID",
+                v[0].params.get("value").unwrap().as_str().unwrap()
+            )
+        } else {
+            String::from("Empty sample?")
+        }
+    }
+    fn flexible() -> bool {
+        false
+    }
+}
 #[cfg(test)]
 mod test {
     use super::*;
@@ -134,5 +176,10 @@ mod test {
     fn test_validation_of_tidy_prot_csv_works() {
         let file = std::fs::File::open("tests/uni_tidy.csv").unwrap();
         TidyProtRecord::validate_omics(file);
+    }
+    #[test]
+    fn test_validation_of_tidy_met_csv_works() {
+        let file = std::fs::File::open("tests/met_tidy.csv").unwrap();
+        TidyMetRecord::validate_omics(file);
     }
 }
