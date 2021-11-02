@@ -14,7 +14,11 @@ fn main() {
     }
     if let (&None, &InputFormat::Met) = (&args.model, &args.format) {}
     if let Err(err) = run(args) {
-        eprintln!("{}", err);
+        // If there is no message, don't print it this will happen where
+        // validation errors were found (printed to stdout)
+        if err.to_string() != "" {
+            eprintln!("{}", err);
+        }
         process::exit(1);
     }
 }
