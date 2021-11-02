@@ -47,25 +47,25 @@ fn from_file_or_stdin(
 
 pub fn run(args: Args) -> Result<(), std::io::Error> {
     let file = from_file_or_stdin(args.file)?;
-    match args.format {
-        InputFormat::Prot => {
-            ProtRecord::validate_omics(file);
-            Ok(())
-        }
-        InputFormat::TidyProt => {
-            TidyProtRecord::validate_omics(file);
-            Ok(())
-        }
+    let number_errors = match args.format {
+        InputFormat::Prot => ProtRecord::validate_omics(file),
+        InputFormat::TidyProt => TidyProtRecord::validate_omics(file),
         InputFormat::Met => {
             // the unwraps are guaranteed by the previous verifications here and in main.rs
             let model =
                 ModelRaw::parse(std::fs::read_to_string(args.model.unwrap())?.as_str()).unwrap();
-            TidyMetRecord::validate_omics(file, &model);
-            Ok(())
+            TidyMetRecord::validate_omics(file, &model)
         }
-        _ => Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "kind of proteomics not implemented yet",
-        )),
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "specification of omics not implemented yet",
+            ))
+        }
+    };
+    if number_errors > 1 {
+        Err(std::io::Error::new(std::io::ErrorKind::InvalidData, ""))
+    } else {
+        Ok(())
     }
 }

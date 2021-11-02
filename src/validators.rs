@@ -16,22 +16,29 @@ static RE_UNIPROT: once_cell::sync::Lazy<Regex> = once_cell::sync::Lazy::new(|| 
 });
 
 pub trait OmicsValidator: Validate + for<'de> Deserialize<'de> {
-    fn validate_omics<R: std::io::Read>(file: R) {
+    fn validate_omics<R: std::io::Read>(file: R) -> usize {
         let mut rdr = ReaderBuilder::new()
             .flexible(Self::flexible())
             .has_headers(Self::has_headers())
             .from_reader(file);
         let off = if Self::has_headers() { 2 } else { 1 };
-        rdr.deserialize().enumerate().for_each(
-            |(i, result): (usize, Result<Self, _>)| match result {
+        rdr.deserialize()
+            .enumerate()
+            .map(|(i, result): (usize, Result<Self, _>)| match result {
                 Ok(record) => {
                     if let Err(e) = record.validate() {
                         println!("Line {}: {}", i + off, Self::handle_error(e.into_errors()));
+                        1
+                    } else {
+                        0
                     }
                 }
-                Err(e) => println!("Line {}: {}", i + off, e),
-            },
-        );
+                Err(e) => {
+                    println!("Line {}: {}", i + off, e);
+                    1
+                }
+            })
+            .sum()
     }
     fn has_headers() -> bool {
         true
@@ -45,22 +52,29 @@ pub trait OmicsValidator: Validate + for<'de> Deserialize<'de> {
 pub trait OmicsModelValidator<'v>:
     ValidateArgs<'v, Args = &'v ModelRaw> + for<'de> Deserialize<'de>
 {
-    fn validate_omics<R: std::io::Read>(file: R, args: &'v ModelRaw) {
+    fn validate_omics<R: std::io::Read>(file: R, args: &'v ModelRaw) -> usize {
         let mut rdr = ReaderBuilder::new()
             .flexible(Self::flexible())
             .has_headers(Self::has_headers())
             .from_reader(file);
         let off = if Self::has_headers() { 2 } else { 1 };
-        rdr.deserialize().enumerate().for_each(
-            |(i, result): (usize, Result<Self, _>)| match result {
+        rdr.deserialize()
+            .enumerate()
+            .map(|(i, result): (usize, Result<Self, _>)| match result {
                 Ok(record) => {
                     if let Err(e) = record.validate_args(args) {
                         println!("Line {}: {}", i + off, Self::handle_error(e.into_errors()));
+                        1
+                    } else {
+                        0
                     }
                 }
-                Err(e) => println!("Line {}: {}", i + off, e),
-            },
-        );
+                Err(e) => {
+                    println!("Line {}: {}", i + off, e);
+                    1
+                }
+            })
+            .sum()
     }
     fn has_headers() -> bool {
         true
@@ -220,17 +234,17 @@ mod test {
     #[test]
     fn test_validation_of_prot_csv_works() {
         let file = fs::File::open("tests/uni.csv").unwrap();
-        ProtRecord::validate_omics(file);
+        assert_eq!(ProtRecord::validate_omics(file), 1);
     }
     #[test]
     fn test_validation_of_tidy_prot_csv_works() {
         let file = fs::File::open("tests/uni_tidy.csv").unwrap();
-        TidyProtRecord::validate_omics(file);
+        assert_eq!(TidyProtRecord::validate_omics(file), 0);
     }
     #[test]
     fn test_validation_of_tidy_met_csv_works() {
         let file = fs::File::open("tests/met_tidy.csv").unwrap();
         let model = ModelRaw::parse(include_str!("../tests/iCLAU786.xml")).unwrap();
-        TidyMetRecord::validate_omics(file, &model);
+        assert_eq!(TidyMetRecord::validate_omics(file, &model), 1);
     }
 }
