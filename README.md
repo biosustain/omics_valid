@@ -80,3 +80,39 @@ omics_valid --format tidy_prot tests/uni_tidy.csv
 ```
 
 won't output anything since the file is properly following the specification.
+
+### Metabolomics
+Metabolomics CSV  in the following tidy (see tidy data, [Hadley Wickham, 2014](https://www.jstatsoft.org/article/view/v059i10)) form:
+
+```csv
+met_id,sample,value
+METABOLITE_IDENTIFIER,SAMPLE_NAME,NUMBER_VALUE
+```
+
+It will report:
+* Identifier not found in the supplied SBML model.
+* Empty samples names.
+
+Example:
+
+```csv
+met_id,sample,value
+glc__D,SIM1,2
+cpd00067,SIM3,1032
+clearly_not_a_metabolite,SIM1,2921
+acon_C,SIM1,18
+MNXM83,SIM2,317
+```
+
+Running the command
+
+```shell
+omics_valid --format met --model tests/iCLAU786.xml tests/uni_tidy.csv
+```
+
+would output:
+
+```
+Line 6: clearly_not_a_metabolite not in model!
+```
+
