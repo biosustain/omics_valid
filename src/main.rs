@@ -1,11 +1,8 @@
 use std::process;
 
-#[macro_use]
-extern crate lazy_static;
-
 mod runner;
 mod validators;
-use runner::{run, Args};
+use runner::{run, Args, InputFormat};
 
 const VERSION_STR: &str = concat!("omics_valid v", env!("CARGO_PKG_VERSION"));
 
@@ -15,6 +12,7 @@ fn main() {
         println!("{}", VERSION_STR);
         process::exit(0);
     }
+    if let (&None, &InputFormat::Met) = (&args.model, &args.format) {}
     if let Err(err) = run(args) {
         eprintln!("{}", err);
         process::exit(1);

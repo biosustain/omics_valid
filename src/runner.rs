@@ -1,11 +1,12 @@
 use crate::validators::*;
 use argh::FromArgs;
+use rust_sbml::ModelRaw;
 use std::path::PathBuf;
 use strum::EnumString;
 
 #[derive(Debug, EnumString)]
 #[strum(serialize_all = "snake_case")]
-enum InputFormat {
+pub enum InputFormat {
     Prot,
     TidyProt,
     Met,
@@ -22,7 +23,11 @@ pub struct Args {
 
     /// format of the file. Currently supported: {{prot, tidy_prot}}
     #[argh(option, short = 'f', default = "InputFormat::TidyProt")]
-    format: InputFormat,
+    pub format: InputFormat,
+
+    /// path to SBML model file, used for metabolite verification
+    #[argh(option, short = 'm')]
+    pub model: Option<PathBuf>,
 
     /// display the version
     #[argh(switch, short = 'v')]
@@ -52,7 +57,10 @@ pub fn run(args: Args) -> Result<(), std::io::Error> {
             Ok(())
         }
         InputFormat::Met => {
-            TidyMetRecord::validate_omics(file);
+            // the unwraps are guaranteed by the previous verifications here and in main.rs
+            let model =
+                ModelRaw::parse(std::fs::read_to_string(args.model.unwrap())?.as_str()).unwrap();
+            TidyMetRecord::validate_omics(file, &model);
             Ok(())
         }
         _ => Err(std::io::Error::new(

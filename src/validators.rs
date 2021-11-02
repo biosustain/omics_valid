@@ -1,17 +1,19 @@
+use once_cell::unsync::Lazy;
 use regex::Regex;
+use rust_sbml::ModelRaw;
 use std::collections::HashMap;
 
 use csv::ReaderBuilder;
 
 use serde::Deserialize;
-use validator::{Validate, ValidationErrorsKind};
+use validator::{Validate, ValidateArgs, ValidationError, ValidationErrorsKind};
 
-lazy_static! {
-   static ref RE_UNIPROT: Regex = Regex::new(
+static RE_UNIPROT: once_cell::sync::Lazy<Regex> = once_cell::sync::Lazy::new(|| {
+    Regex::new(
         r"^([A-N,R-Z][0-9]([A-Z][A-Z, 0-9][A-Z, 0-9][0-9]){1,2})|([O,P,Q][0-9][A-Z, 0-9][A-Z, 0-9][A-Z, 0-9][0-9])(\.\d+)?$"
     )
-    .unwrap();
-}
+    .unwrap()
+});
 
 pub trait OmicsValidator: Validate + for<'de> Deserialize<'de> {
     fn validate_omics<R: std::io::Read>(file: R) {
@@ -24,6 +26,35 @@ pub trait OmicsValidator: Validate + for<'de> Deserialize<'de> {
             |(i, result): (usize, Result<Self, _>)| match result {
                 Ok(record) => {
                     if let Err(e) = record.validate() {
+                        println!("Line {}: {}", i + off, Self::handle_error(e.into_errors()));
+                    }
+                }
+                Err(e) => println!("Line {}: {}", i + off, e),
+            },
+        );
+    }
+    fn has_headers() -> bool {
+        true
+    }
+    fn flexible() -> bool {
+        true
+    }
+    fn handle_error(errors: HashMap<&'static str, ValidationErrorsKind>) -> String;
+}
+
+pub trait OmicsModelValidator<'v>:
+    ValidateArgs<'v, Args = &'v ModelRaw> + for<'de> Deserialize<'de>
+{
+    fn validate_omics<R: std::io::Read>(file: R, args: &'v ModelRaw) {
+        let mut rdr = ReaderBuilder::new()
+            .flexible(Self::flexible())
+            .has_headers(Self::has_headers())
+            .from_reader(file);
+        let off = if Self::has_headers() { 2 } else { 1 };
+        rdr.deserialize().enumerate().for_each(
+            |(i, result): (usize, Result<Self, _>)| match result {
+                Ok(record) => {
+                    if let Err(e) = record.validate_args(args) {
                         println!("Line {}: {}", i + off, Self::handle_error(e.into_errors()));
                     }
                 }
@@ -128,31 +159,47 @@ impl OmicsValidator for TidyProtRecord {
 /// BIGG_ID,SAMPLE_NAME,NUMBER_VALUE
 /// ```
 ///
-/// Identifiers that are not in the model will be reported
+/// Identifiers that are not in the model will be reported.
 ///
 /// # Example
 ///
 /// ```csv
-/// bigg_id,sample,value
+/// met_id,sample,value
 /// glc__D,SIM1,100001
 /// h,SIM3,100001
 /// acon_C,SIM1,100001
 /// ```
 #[derive(Debug, Deserialize, Validate)]
 pub struct TidyMetRecord {
-    // TODO: implements model look up
-    #[validate(regex(path = "RE_UNIPROT", message = "invalid Uniprot ID %s",))]
-    bigg_id: String,
+    #[validate(custom(function = "validate_model_identifier", arg = "&'v_a ModelRaw"))]
+    met_id: String,
     #[validate(length(min = 1))]
     sample: String,
     value: f32,
 }
 
-impl OmicsValidator for TidyMetRecord {
+fn validate_model_identifier(met_id: &str, arg: &ModelRaw) -> Result<(), ValidationError> {
+    let thunk = Lazy::new(|| {
+        arg.list_of_species
+            .species
+            .iter()
+            .filter_map(|sp| sp.annotation.as_ref())
+            .flat_map(|annot| annot.into_iter().map(|rs| rs.split('/').last()))
+            .filter_map(|rs| rs.map(|x| x.to_owned()))
+            .collect::<Vec<String>>()
+    });
+    if thunk.iter().any(|id| id == met_id) {
+        Ok(())
+    } else {
+        Err(ValidationError::new("wrong id!"))
+    }
+}
+
+impl<'a> OmicsModelValidator<'a> for TidyMetRecord {
     fn handle_error(errors: HashMap<&'static str, ValidationErrorsKind>) -> String {
-        if let Some(validator::ValidationErrorsKind::Field(v)) = errors.get("uniprot") {
+        if let Some(validator::ValidationErrorsKind::Field(v)) = errors.get("met_id") {
             format!(
-                "{} invalid Uniprot ID",
+                "{} not in model!",
                 v[0].params.get("value").unwrap().as_str().unwrap()
             )
         } else {
@@ -163,23 +210,27 @@ impl OmicsValidator for TidyMetRecord {
         false
     }
 }
+
 #[cfg(test)]
 mod test {
     use super::*;
 
+    use std::fs;
+
     #[test]
     fn test_validation_of_prot_csv_works() {
-        let file = std::fs::File::open("tests/uni.csv").unwrap();
+        let file = fs::File::open("tests/uni.csv").unwrap();
         ProtRecord::validate_omics(file);
     }
     #[test]
     fn test_validation_of_tidy_prot_csv_works() {
-        let file = std::fs::File::open("tests/uni_tidy.csv").unwrap();
+        let file = fs::File::open("tests/uni_tidy.csv").unwrap();
         TidyProtRecord::validate_omics(file);
     }
     #[test]
     fn test_validation_of_tidy_met_csv_works() {
-        let file = std::fs::File::open("tests/met_tidy.csv").unwrap();
-        TidyMetRecord::validate_omics(file);
+        let file = fs::File::open("tests/met_tidy.csv").unwrap();
+        let model = ModelRaw::parse(include_str!("../tests/iCLAU786.xml")).unwrap();
+        TidyMetRecord::validate_omics(file, &model);
     }
 }
