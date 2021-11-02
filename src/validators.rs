@@ -48,10 +48,10 @@ pub trait OmicsValidator: Validate + for<'de> Deserialize<'de> {
     fn handle_error(errors: HashMap<&'static str, ValidationErrorsKind>) -> String;
 }
 
-pub trait OmicsModelValidator<'v>:
-    ValidateArgs<'v, Args = &'v ModelRaw> + for<'de> Deserialize<'de>
+pub trait OmicsModelValidator<'v, T: 'v>:
+    ValidateArgs<'v, Args = &'v T> + for<'de> Deserialize<'de>
 {
-    fn validate_omics<R: std::io::Read>(file: R, args: &'v ModelRaw) -> usize {
+    fn validate_omics<R: std::io::Read>(file: R, args: &'v T) -> usize {
         let mut rdr = ReaderBuilder::new()
             .flexible(Self::flexible())
             .has_headers(Self::has_headers())
@@ -206,7 +206,7 @@ fn validate_model_identifier(met_id: &str, arg: &ModelRaw) -> Result<(), Validat
     }
 }
 
-impl<'a> OmicsModelValidator<'a> for TidyMetRecord {
+impl<'a> OmicsModelValidator<'a, ModelRaw> for TidyMetRecord {
     fn handle_error(errors: HashMap<&'static str, ValidationErrorsKind>) -> String {
         if let Some(validator::ValidationErrorsKind::Field(v)) = errors.get("met_id") {
             format!(
