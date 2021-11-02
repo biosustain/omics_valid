@@ -1,4 +1,6 @@
-bigg_id,sample,value
-glc__D,SIM1,100001
-h,SIM3,100001
-acon_C,SIM1,100001
+met_id,sample,value
+glc__D,SIM1,2
+cpd00067,SIM3,1032
+clearly_not_a_metabolite,SIM1,2921
+acon_C,SIM1,18
+MNXM83,SIM2,317
