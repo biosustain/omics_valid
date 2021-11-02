@@ -1,4 +1,3 @@
-use once_cell::unsync::Lazy;
 use regex::Regex;
 use rust_sbml::ModelRaw;
 use std::collections::HashMap;
@@ -193,16 +192,14 @@ pub struct TidyMetRecord {
 }
 
 fn validate_model_identifier(met_id: &str, arg: &ModelRaw) -> Result<(), ValidationError> {
-    let thunk = Lazy::new(|| {
-        arg.list_of_species
-            .species
-            .iter()
-            .filter_map(|sp| sp.annotation.as_ref())
-            .flat_map(|annot| annot.into_iter().map(|rs| rs.split('/').last()))
-            .filter_map(|rs| rs.map(|x| x.to_owned()))
-            .collect::<Vec<String>>()
-    });
-    if thunk.iter().any(|id| id == met_id) {
+    if arg
+        .list_of_species
+        .species
+        .iter()
+        .filter_map(|sp| sp.annotation.as_ref())
+        .flat_map(|annot| annot.into_iter().map(|rs| rs.split('/').last()))
+        .any(|id| id == Some(met_id))
+    {
         Ok(())
     } else {
         Err(ValidationError::new("wrong id!"))
