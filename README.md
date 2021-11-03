@@ -46,7 +46,7 @@ omics_valid --format prot tests/uni.csv
 would output
 
 ```
-Line 4: E0X97 invalid Uniprot ID
+1 lines[4]: E0X97 invalid Uniprot ID
 ```
 
 since "E0X97" is not a valid Uniprot ID.
@@ -107,12 +107,12 @@ MNXM83,SIM2,317
 Running the command
 
 ```shell
-omics_valid --format met --model tests/iCLAU786.xml tests/uni_tidy.csv
+omics_valid --format met --model tests/iCLAU786.xml tests/met_tidy.csv
 ```
 
 would output:
 
 ```
-Line 6: clearly_not_a_metabolite not in model!
+1 lines[4]: clearly_not_a_metabolite not in model!
 ```
 

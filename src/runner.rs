@@ -1,5 +1,6 @@
 use crate::validators::*;
 use argh::FromArgs;
+use itertools::Itertools;
 use rust_sbml::ModelRaw;
 use std::path::PathBuf;
 use strum::EnumString;
@@ -47,7 +48,7 @@ fn from_file_or_stdin(
 
 pub fn run(args: Args) -> Result<(), std::io::Error> {
     let file = from_file_or_stdin(args.file)?;
-    let number_errors = match args.format {
+    let error_vec = match args.format {
         InputFormat::Prot => ProtRecord::validate_omics(file),
         InputFormat::TidyProt => TidyProtRecord::validate_omics(file),
         InputFormat::Met => {
@@ -63,7 +64,17 @@ pub fn run(args: Args) -> Result<(), std::io::Error> {
             ))
         }
     };
-    if number_errors > 1 {
+    if !error_vec.is_empty() {
+        let mut error_map = error_vec
+            .iter()
+            .map(|LineError { line, msg }| (msg, line))
+            .into_group_map();
+        error_map.iter_mut().for_each(|(msg, lines)| {
+            let n_lines = lines.len();
+            lines.truncate(3);
+            println!("{} lines{:?}: {}", n_lines, lines, msg)
+        });
+
         Err(std::io::Error::new(std::io::ErrorKind::InvalidData, ""))
     } else {
         Ok(())

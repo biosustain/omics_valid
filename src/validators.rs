@@ -2,7 +2,7 @@ use regex::Regex;
 use rust_sbml::ModelRaw;
 use std::collections::HashMap;
 
-use csv::ReaderBuilder;
+use csv::{ErrorKind, ReaderBuilder};
 
 use serde::Deserialize;
 use validator::{Validate, ValidateArgs, ValidationError, ValidationErrorsKind};
@@ -14,8 +14,14 @@ static RE_UNIPROT: once_cell::sync::Lazy<Regex> = once_cell::sync::Lazy::new(|| 
     .unwrap()
 });
 
+#[derive(Debug)]
+pub struct LineError {
+    pub line: usize,
+    pub msg: String,
+}
+
 pub trait OmicsValidator: Validate + for<'de> Deserialize<'de> {
-    fn validate_omics<R: std::io::Read>(file: R) -> usize {
+    fn validate_omics<R: std::io::Read>(file: R) -> Vec<LineError> {
         let mut rdr = ReaderBuilder::new()
             .flexible(Self::flexible())
             .has_headers(Self::has_headers())
@@ -23,21 +29,29 @@ pub trait OmicsValidator: Validate + for<'de> Deserialize<'de> {
         let off = if Self::has_headers() { 2 } else { 1 };
         rdr.deserialize()
             .enumerate()
-            .map(|(i, result): (usize, Result<Self, _>)| match result {
-                Ok(record) => {
-                    if let Err(e) = record.validate() {
-                        println!("Line {}: {}", i + off, Self::handle_error(e.into_errors()));
-                        1
-                    } else {
-                        0
-                    }
-                }
-                Err(e) => {
-                    println!("Line {}: {}", i + off, e);
-                    1
-                }
+            .filter_map(|(i, result): (usize, Result<Self, _>)| match result {
+                Ok(record) => match record.validate() {
+                    Err(e) => Some(LineError {
+                        line: i + off,
+                        msg: Self::handle_error(e.into_errors()),
+                    }),
+                    _ => None,
+                },
+                Err(e) => match *e.kind() {
+                    ErrorKind::Deserialize {
+                        pos: Some(ref _pos),
+                        ref err,
+                    } => Some(LineError {
+                        line: i + off,
+                        msg: format!("{}", err),
+                    }),
+                    _ => Some(LineError {
+                        line: i + off,
+                        msg: e.to_string(),
+                    }),
+                },
             })
-            .sum()
+            .collect()
     }
     fn has_headers() -> bool {
         true
@@ -51,7 +65,7 @@ pub trait OmicsValidator: Validate + for<'de> Deserialize<'de> {
 pub trait OmicsModelValidator<'v, T: 'v>:
     ValidateArgs<'v, Args = &'v T> + for<'de> Deserialize<'de>
 {
-    fn validate_omics<R: std::io::Read>(file: R, args: &'v T) -> usize {
+    fn validate_omics<R: std::io::Read>(file: R, args: &'v T) -> Vec<LineError> {
         let mut rdr = ReaderBuilder::new()
             .flexible(Self::flexible())
             .has_headers(Self::has_headers())
@@ -59,21 +73,29 @@ pub trait OmicsModelValidator<'v, T: 'v>:
         let off = if Self::has_headers() { 2 } else { 1 };
         rdr.deserialize()
             .enumerate()
-            .map(|(i, result): (usize, Result<Self, _>)| match result {
-                Ok(record) => {
-                    if let Err(e) = record.validate_args(args) {
-                        println!("Line {}: {}", i + off, Self::handle_error(e.into_errors()));
-                        1
-                    } else {
-                        0
-                    }
-                }
-                Err(e) => {
-                    println!("Line {}: {}", i + off, e);
-                    1
-                }
+            .filter_map(|(i, result): (usize, Result<Self, _>)| match result {
+                Ok(record) => match record.validate_args(args) {
+                    Err(e) => Some(LineError {
+                        line: i + off,
+                        msg: Self::handle_error(e.into_errors()),
+                    }),
+                    _ => None,
+                },
+                Err(e) => match *e.kind() {
+                    ErrorKind::Deserialize {
+                        pos: Some(ref _pos),
+                        ref err,
+                    } => Some(LineError {
+                        line: i + off,
+                        msg: format!("{}", err),
+                    }),
+                    _ => Some(LineError {
+                        line: i + off,
+                        msg: e.to_string(),
+                    }),
+                },
             })
-            .sum()
+            .collect()
     }
     fn has_headers() -> bool {
         true
@@ -231,17 +253,17 @@ mod test {
     #[test]
     fn test_validation_of_prot_csv_works() {
         let file = fs::File::open("tests/uni.csv").unwrap();
-        assert_eq!(ProtRecord::validate_omics(file), 1);
+        assert_eq!(ProtRecord::validate_omics(file).len(), 1);
     }
     #[test]
     fn test_validation_of_tidy_prot_csv_works() {
         let file = fs::File::open("tests/uni_tidy.csv").unwrap();
-        assert_eq!(TidyProtRecord::validate_omics(file), 0);
+        assert_eq!(TidyProtRecord::validate_omics(file).len(), 0);
     }
     #[test]
     fn test_validation_of_tidy_met_csv_works() {
         let file = fs::File::open("tests/met_tidy.csv").unwrap();
         let model = ModelRaw::parse(include_str!("../tests/iCLAU786.xml")).unwrap();
-        assert_eq!(TidyMetRecord::validate_omics(file, &model), 1);
+        assert_eq!(TidyMetRecord::validate_omics(file, &model).len(), 1);
     }
 }
