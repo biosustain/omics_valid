@@ -2,12 +2,35 @@
 
 This repository serves two purposes:
 
-1. Define specifications for our OMICS formats
+1. Define specifications for our OMICS formats.
 2. Provide a validator to ease the use of the specifications.
+
+#### Table of contents
+<!--ts-->
+   * [Installation](#installation)
+      * [Building from source](#building-from-source)
+   * [Specifications](#supported-specifications)
+      * [Proteomics](#proteomics)
+      * [Tidy Proteomics](#tidy-proteomics)
+      * [Metabolomics](#metabolomics)
+   * [Usage](#usage)
+<!--te-->
 
 ## Installation
 
-Binaries for Linux, Max and Windows will be generated in the future. For now, it has to be installed from source with [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
+Binaries for Linux, Mac and Windows are released on every tag.
+
+1. Go to the [releases page](https://github.com/biosustain/omics_valid/releases/).
+2. Look for your platform in the file names (check for _apple_ or _windows_ under _Assets_) and download the file:
+	- If Linux, you probably want the file which has `gnu` in the name.
+	- If Mac, there is only one file.
+	- If Windows, you probably want the `.zip` file.
+3. Unpack it, a binary file `omics_valid` should have been extracted.
+4. (Optional) Put the extracted file `omics_valid` under your PATH.
+
+### Building from source
+
+Install [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html) and run
 
 ```
 git clone https://github.com/biosustain/omics_valid.git
@@ -116,3 +139,17 @@ would output:
 1 lines[4]: clearly_not_a_metabolite not in model!
 ```
 
+### Usage
+
+```shell
+$ omics_valid --help
+Usage: omics_valid [<file>] [-f <format>] [-m <model>] [-v]
+
+Omics format validator.
+
+Options:
+  -f, --format      format of the file. Currently supported: {prot, tidy_prot, met}
+  -m, --model       path to SBML model file, used for metabolite verification
+  -v, --version     display the version
+  --help            display usage information
+```
