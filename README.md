@@ -13,7 +13,6 @@ This repository serves two purposes:
       * [Proteomics](#proteomics)
       * [Tidy Proteomics](#tidy-proteomics)
       * [Metabolomics](#metabolomics)
-      * [Transcriptomics](#transcriptomics)
    * [Usage](#usage)
 <!--te-->
 
@@ -137,12 +136,8 @@ omics_valid --format met --model tests/iCLAU786.xml tests/met_tidy.csv
 would output:
 
 ```
-1 lines[35]: ./tests/data/some.fastq: Declared FASTQ path does not exist!
-1 lines[36]: ./tests/data/some.fastq: Declared FASTQ path does not exist!;	Inconsistent experiment: R1 and R2 did not match the LibraryLayout! (assuming local data since field 'Run' is empty)
+1 lines[4]: clearly_not_a_metabolite not in model!
 ```
-
-As can be seen, when more than one error is found in a single experiment (a row),
-the errors are concatenated with ";\t".
 
 ### Transcriptomics
 
@@ -167,6 +162,17 @@ Additionally, the FASTQ files in R1 and R2 will be checked if present for possib
 ```shell
 omics_valid -f rna tests/rna.csv
 ```
+
+would output
+
+```
+1 lines[35]: ./tests/data/some.fastq: Declared FASTQ path does not exist!
+1 lines[36]: ./tests/data/some.fastq: Declared FASTQ path does not exist!;	Inconsistent experiment: R1 and R2 did not match the LibraryLayout! (assuming local data since field 'Run' is empty)
+1 lines[38]: ./tests/invalid.fastq: failure reading FASTQ! One record is incorrect
+```
+
+As can be seen, when more than one error is found in a single record,
+the errors are concatenated with a ";\t".
 
 ### Usage
 
