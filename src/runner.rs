@@ -22,7 +22,7 @@ pub struct Args {
     #[argh(positional)]
     file: Option<PathBuf>,
 
-    /// format of the file. Currently supported: {{prot, tidy_prot}}
+    /// format of the file. Currently supported: {{prot, tidy_prot, met, rna}}
     #[argh(option, short = 'f', default = "InputFormat::TidyProt")]
     pub format: InputFormat,
 
@@ -57,6 +57,7 @@ pub fn run(args: Args) -> Result<(), std::io::Error> {
                 ModelRaw::parse(std::fs::read_to_string(args.model.unwrap())?.as_str()).unwrap();
             TidyMetRecord::validate_omics(file, &model)
         }
+        InputFormat::Rna => RnaRecord::validate_omics(file),
         _ => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,

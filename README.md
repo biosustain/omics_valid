@@ -13,6 +13,7 @@ This repository serves two purposes:
       * [Proteomics](#proteomics)
       * [Tidy Proteomics](#tidy-proteomics)
       * [Metabolomics](#metabolomics)
+      * [Transcriptomics](#transcriptomics)
    * [Usage](#usage)
 <!--te-->
 
@@ -136,7 +137,35 @@ omics_valid --format met --model tests/iCLAU786.xml tests/met_tidy.csv
 would output:
 
 ```
-1 lines[4]: clearly_not_a_metabolite not in model!
+1 lines[35]: ./tests/data/some.fastq: Declared FASTQ path does not exist!
+1 lines[36]: ./tests/data/some.fastq: Declared FASTQ path does not exist!;	Inconsistent experiment: R1 and R2 did not match the LibraryLayout! (assuming local data since field 'Run' is empty)
+```
+
+As can be seen, when more than one error is found in a single experiment (a row),
+the errors are concatenated with ";\t".
+
+### Transcriptomics
+
+RNA files for iModulon. These are experiments from SRA or local files.
+
+```csv
+Experiment,LibraryLayout,Platform,Run,R1,R2
+String,Single|Paired,ILLUMINA|PACBIO_SMRT|ETC,None|Number,None|path/to/file,None|path/to/file
+```
+
+It may contain other fields. The validator will check the following (taken from [modulome-workflow](https://github.com/avsastry/modulome-workflow/tree/65c5bd3c9facef6a41899429403c531923aa5204/2_process_data#setup)):
+
+1. `Experiment`: For public data, this is your SRX ID. For local data, data should be named with a standardized ID (e.g. ecoli_0001)
+1. `LibraryLayout`: Either PAIRED or SINGLE
+1. `Platform`: Usually ILLUMINA, ABI_SOLID, BGISEQ, or PACBIO_SMRT
+1. `Run`: One or more SRR numbers referring to individual lanes from a sequencer. This field is empty for local data.
+1. `R1`: For local data, the complete path to the R1 file. If files are stored on AWS S3, filenames should look like `s3://<bucket/path/to>.fastq.gz`. `R1` and `R2` columns are empty for public SRA data.
+1. `R2`: Same as R1. This will be empty for SINGLE end sequences.
+
+Additionally, the FASTQ files in R1 and R2 will be checked if present for possible format errors.
+
+```shell
+omics_valid -f rna tests/rna.csv
 ```
 
 ### Usage
@@ -147,8 +176,12 @@ Usage: omics_valid [<file>] [-f <format>] [-m <model>] [-v]
 
 Omics format validator.
 
+Positional Arguments:
+  file              input omics file.
+
 Options:
-  -f, --format      format of the file. Currently supported: {prot, tidy_prot, met}
+  -f, --format      format of the file. Currently supported: {prot, tidy_prot,
+                    met, rna}
   -m, --model       path to SBML model file, used for metabolite verification
   -v, --version     display the version
   --help            display usage information

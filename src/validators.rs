@@ -1,6 +1,8 @@
+use bio::io::fastq::Reader;
 use regex::Regex;
 use rust_sbml::ModelRaw;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use csv::{ErrorKind, ReaderBuilder};
 
@@ -25,6 +27,7 @@ pub trait OmicsValidator: Validate + for<'de> Deserialize<'de> {
         let mut rdr = ReaderBuilder::new()
             .flexible(Self::flexible())
             .has_headers(Self::has_headers())
+            .delimiter(Self::delimiter())
             .from_reader(file);
         let off = if Self::has_headers() { 2 } else { 1 };
         rdr.deserialize()
@@ -60,6 +63,9 @@ pub trait OmicsValidator: Validate + for<'de> Deserialize<'de> {
         true
     }
     fn handle_error(errors: HashMap<&'static str, ValidationErrorsKind>) -> String;
+    fn delimiter() -> u8 {
+        b','
+    }
 }
 
 pub trait OmicsModelValidator<'v, T: 'v>:
@@ -70,6 +76,7 @@ pub trait OmicsModelValidator<'v, T: 'v>:
             .flexible(Self::flexible())
             .has_headers(Self::has_headers())
             .from_reader(file);
+
         let off = if Self::has_headers() { 2 } else { 1 };
         rdr.deserialize()
             .enumerate()
@@ -244,6 +251,110 @@ impl<'a> OmicsModelValidator<'a, ModelRaw> for TidyMetRecord {
     }
 }
 
+/// RNA files for iModulon. These are experiments from SRA or local files.
+///
+/// ```csv
+/// Experiment,LibraryLayout,Platform,Run,R1,R2
+/// String,Single|Paired,ILLUMINA|PACBIO_SMRT|ETC,None|Number,None|path/to/file,None|path/to/file
+/// ```
+///
+/// It may contain other fields. The validator will check the following (taken from [modulome-workflow](https://github.com/avsastry/modulome-workflow/tree/65c5bd3c9facef6a41899429403c531923aa5204/2_process_data#setup)):
+///
+/// 1. `Experiment`: For public data, this is your SRX ID. For local data, data should be named with a standardized ID (e.g. ecoli_0001)
+/// 1. `LibraryLayout`: Either PAIRED or SINGLE
+/// 1. `Platform`: Usually ILLUMINA, ABI_SOLID, BGISEQ, or PACBIO_SMRT
+/// 1. `Run`: One or more SRR numbers referring to individual lanes from a sequencer. This field is empty for local data.
+/// 1. `R1`: For local data, the complete path to the R1 file. If files are stored on AWS S3, filenames should look like `s3://<bucket/path/to>.fastq.gz`. `R1` and `R2` columns are empty for public SRA data.
+/// 1. `R2`: Same as R1. This will be empty for SINGLE end sequences.
+///
+/// Additionally, the FASTQ files in R1 and R2 will be checked if present for possible format errors.
+#[derive(Debug, Deserialize, Validate)]
+#[serde(rename_all = "PascalCase")]
+#[validate(schema(function = "validate_rna_category"))]
+pub struct RnaRecord {
+    #[validate(length(min = 1))]
+    experiment: String,
+    library_layout: LibraryLayout,
+    platform: Platform,
+    #[validate(length(min = 1))]
+    run: Option<String>,
+    #[validate(custom(function = "validate_fastq"))]
+    r1: Option<PathBuf>,
+    #[validate(custom(function = "validate_fastq"))]
+    r2: Option<PathBuf>,
+}
+
+// Check that the fastq files are OK
+// TODO: it would be extra nice to check that the records correspond to the provided FASTA
+fn validate_fastq(fastq_path: &Path) -> Result<(), ValidationError> {
+    let reader = Reader::from_file(fastq_path)
+        .map_err(|_| ValidationError::new("Declared FASTQ path does not exist!"))?;
+    let records = reader.records();
+    for result in records {
+        result
+            .map_err(|_| ValidationError::new("failure reading FASTQ! One record is incorrect"))?;
+    }
+    Ok(())
+}
+
+fn validate_rna_category(record: &RnaRecord) -> Result<(), ValidationError> {
+    if record.run.is_none() {
+        // we have local data
+        return match (&record.library_layout, &record.r1, &record.r2) {
+        // return match (&record.library_layout, &record.r1, &record.r2) {
+            (LibraryLayout::Paired, Some(_), Some(_)) => Ok(()),
+            (LibraryLayout::Single, Some(_), None) => Ok(()),
+            _ => Err(ValidationError::new("R1 and R2 did not match the LibraryLayout! (assuming local data since field 'Run' is empty)")),
+        };
+    }
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum LibraryLayout {
+    Paired,
+    Single,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum Platform {
+    Illumina,
+    Bgiseq,
+    AbiSolid,
+    PacbioSmrt,
+    Other(String),
+}
+
+impl OmicsValidator for RnaRecord {
+    fn handle_error(errors: HashMap<&'static str, ValidationErrorsKind>) -> String {
+        let errors_vec: Vec<String> = errors
+            .iter()
+            .map(|(&k, val)| match val {
+                validator::ValidationErrorsKind::Field(v) if k != "__all__" => {
+                    format!(
+                        "{}: {}",
+                        v[0].params.get("value").unwrap().as_str().unwrap(),
+                        v[0].code,
+                    )
+                }
+                validator::ValidationErrorsKind::Field(v) => {
+                    format!("Inconsistent experiment: {}", v[0].code,)
+                }
+                _ => "Empty experiment?".to_string(),
+            })
+            .collect();
+        errors_vec.join(";\t")
+    }
+    fn flexible() -> bool {
+        false
+    }
+    fn delimiter() -> u8 {
+        b'\t'
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -265,5 +376,10 @@ mod test {
         let file = fs::File::open("tests/met_tidy.csv").unwrap();
         let model = ModelRaw::parse(include_str!("../tests/iCLAU786.xml")).unwrap();
         assert_eq!(TidyMetRecord::validate_omics(file, &model).len(), 1);
+    }
+    #[test]
+    fn test_validation_of_rna_tsv_works() {
+        let file = fs::File::open("tests/rna.tsv").unwrap();
+        assert_eq!(RnaRecord::validate_omics(file).len(), 2);
     }
 }
