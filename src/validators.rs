@@ -133,6 +133,7 @@ pub trait OmicsModelValidator<'v, T: 'v>:
 pub struct ProtRecord {
     #[validate(regex(path = "RE_UNIPROT", message = "invalid Uniprot ID %s",))]
     uniprot: String,
+    #[allow(dead_code)]
     values: Vec<f32>,
 }
 
@@ -175,6 +176,7 @@ pub struct TidyProtRecord {
     uniprot: String,
     #[validate(length(min = 1))]
     sample: String,
+    #[allow(dead_code)]
     value: f32,
 }
 
@@ -217,6 +219,7 @@ pub struct TidyMetRecord {
     met_id: String,
     #[validate(length(min = 1))]
     sample: String,
+    #[allow(dead_code)]
     value: f32,
 }
 
@@ -274,7 +277,10 @@ impl<'a> OmicsModelValidator<'a, ModelRaw> for TidyMetRecord {
 pub struct RnaRecord {
     #[validate(length(min = 1))]
     experiment: String,
+    /// will be mathced with R1 and R2 if local
     library_layout: LibraryLayout,
+    /// we do not really care about the platform but it is nice to show usual values
+    #[allow(dead_code)]
     platform: Platform,
     #[validate(length(min = 1))]
     run: Option<String>,
@@ -291,8 +297,7 @@ fn validate_fastq(fastq_path: &Path) -> Result<(), ValidationError> {
         .map_err(|_| ValidationError::new("Declared FASTQ path does not exist!"))?;
     let records = reader.records();
     for result in records {
-        result
-            .map_err(|_| ValidationError::new("failure reading FASTQ! One record is incorrect"))?;
+        result.map_err(|_| ValidationError::new("failure reading FASTQ! Record is incorrect"))?;
     }
     Ok(())
 }
@@ -380,6 +385,6 @@ mod test {
     #[test]
     fn test_validation_of_rna_tsv_works() {
         let file = fs::File::open("tests/rna.tsv").unwrap();
-        assert_eq!(RnaRecord::validate_omics(file).len(), 2);
+        assert_eq!(RnaRecord::validate_omics(file).len(), 3);
     }
 }
