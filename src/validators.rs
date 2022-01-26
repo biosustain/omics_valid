@@ -1,6 +1,7 @@
 use bio::io::fastq::Reader;
 use regex::Regex;
 use rust_sbml::ModelRaw;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -296,8 +297,13 @@ fn validate_fastq(fastq_path: &Path) -> Result<(), ValidationError> {
     let reader = Reader::from_file(fastq_path)
         .map_err(|_| ValidationError::new("Declared FASTQ path does not exist!"))?;
     let records = reader.records();
-    for result in records {
-        result.map_err(|_| ValidationError::new("failure reading FASTQ! Record is incorrect"))?;
+    for (i, result) in records.enumerate() {
+        result.map_err(|e| {
+            let mut err = ValidationError::new("Malformed FASTQ");
+            err.add_param(Cow::from("fastq"), &e.to_string());
+            err.add_param(Cow::from("pos"), &(i + 1));
+            err
+        })?;
     }
     Ok(())
 }
@@ -338,11 +344,21 @@ impl OmicsValidator for RnaRecord {
             .iter()
             .map(|(&k, val)| match val {
                 validator::ValidationErrorsKind::Field(v) if k != "__all__" => {
-                    format!(
-                        "{}: {}",
-                        v[0].params.get("value").unwrap().as_str().unwrap(),
-                        v[0].code,
-                    )
+                    if v[0].params.contains_key("fastq") {
+                        format!(
+                            "{} {} {} in record {}",
+                            v[0].code,
+                            v[0].params.get("value").unwrap().as_str().unwrap(),
+                            v[0].params.get("fastq").unwrap().as_str().unwrap(),
+                            v[0].params.get("pos").unwrap(),
+                        )
+                    } else {
+                        format!(
+                            "{} {}",
+                            v[0].params.get("value").unwrap().as_str().unwrap(),
+                            v[0].code,
+                        )
+                    }
                 }
                 validator::ValidationErrorsKind::Field(v) => {
                     format!("Inconsistent experiment: {}", v[0].code,)
